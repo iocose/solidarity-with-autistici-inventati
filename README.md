@@ -1,4 +1,4 @@
-# solidarity-with-autistici-inventati
+# In solidarity with the Autistici/Inventati collective
 
 This repository contains some WebGL demos to show solidarity to the A/I crew.
 
