@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>socializzare saperi senza creare poteri</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="description" content="socializzare saperi senza creare poteri. In solidarieta' con A/I">
+<style>
+  @font-face {
+    font-family: 'American Typewriter';
+    src: url('./assets/AmericanTypewriterBold.ttf') format('truetype');
+    font-weight: bold;
+  }
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0a0a0a;
+  }
+  #scene {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    touch-action: none;
+  }
+  .corner {
+    position: fixed;
+    top: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    z-index: 10;
+  }
+  .corner-text {
+    margin: 0;
+    padding: 0 0.5em;
+    font-family: 'American Typewriter', sans-serif;
+    font-weight: bold;
+    font-size: 1rem;
+    line-height: 1;
+    color: #ffffff;
+  }
+  .corner-mark {
+    padding: 0.2em 0.35em;
+    font-size: 2rem;
+    line-height: 1;
+  }
+  .corner-mark img {
+    display: block;
+    width: 1em;
+    height: 1em;
+  }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./js/vendor/three.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div class="corner">
+  <p class="corner-text">in solidarity with A/I</p>
+  <a class="corner-mark" href="http://inventati.org"><img src="./assets/red-star.png" alt="inventati.org"></a>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { FontLoader } from './js/vendor/three/addons/loaders/FontLoader.js';
+import { TextGeometry } from './js/vendor/three/addons/geometries/TextGeometry.js';
+
+const FONT_URL = './assets/AmericanTypewriter_Bold.json';
+const LINES = ['socializzare saperi', 'senza', 'creare poteri'];
+const TEXT_WIDTH_RATIO = 0.6;
+const LINE_SPACING = 1.15;
+const CAMERA_Z = 8;
+const PARALLAX_X = 1.4;
+const PARALLAX_Y = 0.9;
+const CAMERA_EASE = 0.06;
+const FEEDBACK_DECAY = 0.83;
+const FEEDBACK_ZOOM = 1.003;
+const FLUID_RESOLUTION = 128;
+const FLUID_FLOW_STRENGTH = 0.09;
+const FLUID_TINT = 0.7;
+const FLUID_BACKGROUND = 0.07;
+const POINTER_ACTIVE_WINDOW = 200;
+const TEXT_EXTRUDE_SETTINGS = {
+  size: 1,
+  depth: 0.15,
+  curveSegments: 6,
+  bevelEnabled: true,
+  bevelThickness: 0.02,
+  bevelSize: 0.015,
+  bevelSegments: 3,
+};
+
+const canvas = document.getElementById('scene');
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0a);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, CAMERA_Z);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.autoClear = false;
+
+scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+const keyLight = new THREE.DirectionalLight(0xffffff, 4);
+keyLight.position.set(2, 3, 4);
+scene.add(keyLight);
+
+const textGroup = new THREE.Group();
+scene.add(textGroup);
+
+const textMaterials = [
+  new THREE.MeshPhongMaterial({ color: 0xffffff, flatShading: true }),
+  new THREE.MeshPhongMaterial({ color: 0xdddddd }),
+];
+
+function loadFont() {
+  const fontLoader = new FontLoader();
+  return new Promise((resolve) => fontLoader.load(FONT_URL, resolve));
+}
+
+function buildTextGroup(font) {
+  LINES.forEach((line, i) => {
+    const geometry = new TextGeometry(line, { font, ...TEXT_EXTRUDE_SETTINGS });
+    geometry.center();
+    const mesh = new THREE.Mesh(geometry, textMaterials);
+    mesh.position.y = ((LINES.length - 1) / 2 - i) * LINE_SPACING;
+    textGroup.add(mesh);
+  });
+}
+
+let baseWidth = 1;
+
+function getFrustumWidthAtZ(zPlane) {
+  const distance = camera.position.z - zPlane;
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const height = 2 * Math.tan(vFov / 2) * distance;
+  return height * camera.aspect;
+}
+
+function fitTextToViewport() {
+  const targetWidth = getFrustumWidthAtZ(0) * TEXT_WIDTH_RATIO;
+  const scale = targetWidth / baseWidth;
+  textGroup.scale.setScalar(scale);
+}
+
+const pointerTarget = new THREE.Vector2(0, 0);
+const pointerCurrent = new THREE.Vector2(0, 0);
+const pointerUv = new THREE.Vector2(0.5, 0.5);
+let pointerLastMoveAt = -Infinity;
+
+function setPointer(clientX, clientY) {
+  pointerTarget.x = (clientX / window.innerWidth) * 2 - 1;
+  pointerTarget.y = (clientY / window.innerHeight) * 2 - 1;
+  pointerUv.x = clientX / window.innerWidth;
+  pointerUv.y = 1 - clientY / window.innerHeight;
+  pointerLastMoveAt = performance.now();
+}
+
+window.addEventListener('mousemove', (e) => setPointer(e.clientX, e.clientY));
+window.addEventListener('touchstart', (e) => {
+  const touch = e.touches[0];
+  if (touch) setPointer(touch.clientX, touch.clientY);
+}, { passive: true });
+window.addEventListener('touchmove', (e) => {
+  const touch = e.touches[0];
+  if (touch) setPointer(touch.clientX, touch.clientY);
+}, { passive: true });
+
+function createRenderTarget() {
+  return new THREE.WebGLRenderTarget(1, 1, {
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    format: THREE.RGBAFormat,
+  });
+}
+
+function createFluidTarget() {
+  return new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    wrapS: THREE.RepeatWrapping,
+    wrapT: THREE.RepeatWrapping,
+  });
+}
+
+const sceneTarget = createRenderTarget();
+const feedbackTargets = [createRenderTarget(), createRenderTarget()];
+let readIndex = 0;
+
+const fluidTargets = [createFluidTarget(), createFluidTarget()];
+let fluidReadIndex = 0;
+let fluidWidth = 1;
+let fluidHeight = 1;
+
+const feedbackCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+const FULLSCREEN_VERTEX_SHADER = `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+  }
+`;
+
+const fluidMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    tFluid: { value: null },
+    uTexel: { value: new THREE.Vector2(1, 1) },
+    uFrame: { value: 0 },
+    uPointerPx: { value: new THREE.Vector2(0, 0) },
+    uPointerActive: { value: 0 },
+  },
+  vertexShader: FULLSCREEN_VERTEX_SHADER,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tFluid;
+    uniform vec2 uTexel;
+    uniform float uFrame;
+    uniform vec2 uPointerPx;
+    uniform float uPointerActive;
+
+    // Simplex noise by Inigo Quilez, MIT License
+    // Copyright (c) 2013 Inigo Quilez
+    // Permission is hereby granted, free of charge, to any person obtaining a copy
+    // of this software and associated documentation files (the "Software"), to deal
+    // in the Software without restriction, including without limitation the rights
+    // to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    // copies of the Software, and to permit persons to whom the Software is
+    // furnished to do so, subject to the following conditions:
+    // The above copyright notice and this permission notice shall be included in
+    // all copies or substantial portions of the Software.
+    // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    vec2 hash(vec2 p) {
+      p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+      return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+    }
+
+    float noise(in vec2 p) {
+      const float K1 = 0.366025404;
+      const float K2 = 0.211324865;
+      vec2 i = floor(p + (p.x + p.y) * K1);
+      vec2 a = p - i + (i.x + i.y) * K2;
+      vec2 o = step(a.yx, a.xy);
+      vec2 b = a - o + K2;
+      vec2 c = a - 1.0 + 2.0 * K2;
+      vec3 h = max(0.5 - vec3(dot(a, a), dot(b, b), dot(c, c)), 0.0);
+      vec3 n = h * h * h * h * vec3(dot(a, hash(i + 0.0)), dot(b, hash(i + o)), dot(c, hash(i + 1.0)));
+      return dot(n, vec3(70.0));
+    }
+
+    vec2 normz(vec2 x) {
+      return x == vec2(0.0, 0.0) ? vec2(0.0, 0.0) : normalize(x);
+    }
+
+    // based on the work of cornusammonis
+    // https://www.shadertoy.com/view/XddSRX
+    vec3 advect(vec2 ab, vec2 uv, vec2 st, float sc) {
+      vec2 aUv = uv - ab * sc * st;
+      const float _G0 = 0.25;
+      const float _G1 = 0.125;
+      const float _G2 = 0.0625;
+      vec2 n = vec2(0.0, st.y);
+      vec2 ne = vec2(st.x, st.y);
+      vec2 e = vec2(st.x, 0.0);
+      vec2 se = vec2(st.x, -st.y);
+      vec2 s = vec2(0.0, -st.y);
+      vec2 sw = vec2(-st.x, -st.y);
+      vec2 w = vec2(-st.x, 0.0);
+      vec2 nw = vec2(-st.x, st.y);
+      vec3 c0 = texture2D(tFluid, fract(aUv)).xyz;
+      vec3 cn = texture2D(tFluid, fract(aUv + n)).xyz;
+      vec3 ce = texture2D(tFluid, fract(aUv + e)).xyz;
+      vec3 cs = texture2D(tFluid, fract(aUv + s)).xyz;
+      vec3 cw = texture2D(tFluid, fract(aUv + w)).xyz;
+      vec3 cnw = texture2D(tFluid, fract(aUv + nw)).xyz;
+      vec3 csw = texture2D(tFluid, fract(aUv + sw)).xyz;
+      vec3 cne = texture2D(tFluid, fract(aUv + ne)).xyz;
+      vec3 cse = texture2D(tFluid, fract(aUv + se)).xyz;
+      return _G0 * c0 + _G1 * (cn + ce + cw + cs) + _G2 * (cnw + csw + cne + cse);
+    }
+
+    void main() {
+      const float _K0 = -20.0 / 6.0;
+      const float _K1 = 4.0 / 6.0;
+      const float _K2 = 1.0 / 6.0;
+      const float curlScale = -0.6;
+      const float ls = 0.05;
+      const float ps = -0.8;
+      const float ds = -0.05;
+      const float dp = -0.04;
+      const float pl = 0.3;
+      const float ad = 6.0;
+      const float pwr = 1.0;
+      const float amp = 1.0;
+      const float upd = 0.8;
+      const float sq2 = 0.6;
+
+      vec2 uv = vUv;
+
+      vec2 n = vec2(0.0, uTexel.y);
+      vec2 ne = vec2(uTexel.x, uTexel.y);
+      vec2 e = vec2(uTexel.x, 0.0);
+      vec2 se = vec2(uTexel.x, -uTexel.y);
+      vec2 s = vec2(0.0, -uTexel.y);
+      vec2 sw = vec2(-uTexel.x, -uTexel.y);
+      vec2 w = vec2(-uTexel.x, 0.0);
+      vec2 nw = vec2(-uTexel.x, uTexel.y);
+
+      vec3 c0 = texture2D(tFluid, fract(uv)).xyz;
+      vec3 cn = texture2D(tFluid, fract(uv + n)).xyz;
+      vec3 ce = texture2D(tFluid, fract(uv + e)).xyz;
+      vec3 cs = texture2D(tFluid, fract(uv + s)).xyz;
+      vec3 cw = texture2D(tFluid, fract(uv + w)).xyz;
+      vec3 cnw = texture2D(tFluid, fract(uv + nw)).xyz;
+      vec3 csw = texture2D(tFluid, fract(uv + sw)).xyz;
+      vec3 cne = texture2D(tFluid, fract(uv + ne)).xyz;
+      vec3 cse = texture2D(tFluid, fract(uv + se)).xyz;
+
+      vec3 lapl = _K0 * c0 + _K1 * (cn + ce + cw + cs) + _K2 * (cnw + csw + cne + cse);
+      float sp = ps * lapl.z;
+
+      float curl = cn.x - cs.x - ce.y + cw.y + sq2 * (cnw.x + cnw.y + cne.x - cne.y + csw.y - csw.x - cse.y - cse.x);
+      float sc = curlScale * sign(curl) * pow(abs(curl), pwr);
+
+      float div = cs.y - cn.y - ce.x + cw.x + sq2 * (cnw.x - cnw.y - cne.x - cne.y + csw.x + csw.y + cse.y - cse.x);
+      float sd = c0.z + dp * div + pl * lapl.z;
+
+      vec2 norm = normz(c0.xy);
+      vec3 ab = advect(c0.xy, uv, uTexel, ad);
+
+      float ta = amp * ab.x + ls * lapl.x + norm.x * sp + c0.x * ds * sd;
+      float tb = amp * ab.y + ls * lapl.y + norm.y * sp + c0.y * ds * sd;
+
+      float a = ta * cos(sc) - tb * sin(sc);
+      float b = ta * sin(sc) + tb * cos(sc);
+
+      vec3 abd = upd * c0 + (1.0 - upd) * vec3(a, b, sd);
+
+      if (uPointerActive > 0.5) {
+        vec2 fragPx = uv / uTexel;
+        vec2 d = fragPx - uPointerPx;
+        float m = exp(-length(d) / 10.0);
+        abd.xy += m * normz(d);
+      }
+
+      if (uFrame < 10.0) {
+        vec3 rnd = vec3(noise(16.0 * uv + 1.1), noise(16.0 * uv + 2.2), noise(16.0 * uv + 3.3));
+        gl_FragColor = vec4(rnd, 0.0);
+      } else {
+        abd.z = clamp(abd.z, -1.0, 1.0);
+        abd.xy = clamp(length(abd.xy) > 1.0 ? normz(abd.xy) : abd.xy, -1.0, 1.0);
+        gl_FragColor = vec4(abd, 0.0);
+      }
+    }
+  `,
+  depthTest: false,
+  depthWrite: false,
+});
+const fluidScene = new THREE.Scene();
+fluidScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fluidMaterial));
+
+const feedbackMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    tCurrent: { value: null },
+    tPrevious: { value: null },
+    tFluid: { value: null },
+    uDecay: { value: FEEDBACK_DECAY },
+    uZoom: { value: FEEDBACK_ZOOM },
+    uFlowStrength: { value: FLUID_FLOW_STRENGTH },
+    uTint: { value: FLUID_TINT },
+    uBackgroundIntensity: { value: FLUID_BACKGROUND },
+  },
+  vertexShader: FULLSCREEN_VERTEX_SHADER,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tCurrent;
+    uniform sampler2D tPrevious;
+    uniform sampler2D tFluid;
+    uniform float uDecay;
+    uniform float uZoom;
+    uniform float uFlowStrength;
+    uniform float uTint;
+    uniform float uBackgroundIntensity;
+    void main() {
+      vec3 fluidState = texture2D(tFluid, vUv).xyz;
+      vec3 norm = normalize(fluidState + 1e-4);
+      vec3 iridescent = 0.5 + 0.6 * cross(norm, vec3(0.5, -0.4, 0.5)) + vec3(0.1) * norm.z;
+
+      vec2 center = vec2(0.5);
+      vec2 feedbackUv = (vUv - center) * uZoom + center + fluidState.xy * uFlowStrength;
+      vec3 previous = texture2D(tPrevious, feedbackUv).rgb;
+      vec3 current = texture2D(tCurrent, vUv).rgb;
+
+      vec3 trail = previous * uDecay * mix(vec3(1.0), iridescent, uTint);
+      vec3 background = iridescent * uBackgroundIntensity;
+
+      gl_FragColor = vec4(max(current, max(trail, background)), 1.0);
+    }
+  `,
+  depthTest: false,
+  depthWrite: false,
+});
+const feedbackScene = new THREE.Scene();
+feedbackScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), feedbackMaterial));
+
+function resizeRenderTargets() {
+  const pixelRatio = renderer.getPixelRatio();
+  const width = Math.max(1, Math.floor(window.innerWidth * pixelRatio));
+  const height = Math.max(1, Math.floor(window.innerHeight * pixelRatio));
+  sceneTarget.setSize(width, height);
+  feedbackTargets[0].setSize(width, height);
+  feedbackTargets[1].setSize(width, height);
+  feedbackTargets.forEach((target) => {
+    renderer.setRenderTarget(target);
+    renderer.clear();
+  });
+  renderer.setRenderTarget(null);
+}
+
+function resizeFluidTargets() {
+  fluidWidth = Math.max(2, Math.round(FLUID_RESOLUTION * camera.aspect));
+  fluidHeight = FLUID_RESOLUTION;
+  fluidTargets[0].setSize(fluidWidth, fluidHeight);
+  fluidTargets[1].setSize(fluidWidth, fluidHeight);
+  fluidMaterial.uniforms.uTexel.value.set(1 / fluidWidth, 1 / fluidHeight);
+  fluidMaterial.uniforms.uFrame.value = 0;
+  fluidTargets.forEach((target) => {
+    renderer.setRenderTarget(target);
+    renderer.clear();
+  });
+  renderer.setRenderTarget(null);
+}
+
+function onWindowResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  fitTextToViewport();
+  resizeRenderTargets();
+  resizeFluidTargets();
+}
+
+window.addEventListener('resize', onWindowResize);
+window.addEventListener('orientationchange', onWindowResize);
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  pointerCurrent.x += (pointerTarget.x - pointerCurrent.x) * CAMERA_EASE;
+  pointerCurrent.y += (pointerTarget.y - pointerCurrent.y) * CAMERA_EASE;
+
+  camera.position.x = pointerCurrent.x * PARALLAX_X;
+  camera.position.y = -pointerCurrent.y * PARALLAX_Y;
+  camera.position.z = CAMERA_Z;
+  camera.lookAt(0, 0, 0);
+
+  const fluidWriteIndex = 1 - fluidReadIndex;
+  fluidMaterial.uniforms.tFluid.value = fluidTargets[fluidReadIndex].texture;
+  fluidMaterial.uniforms.uFrame.value += 1;
+  fluidMaterial.uniforms.uPointerPx.value.set(pointerUv.x * fluidWidth, pointerUv.y * fluidHeight);
+  fluidMaterial.uniforms.uPointerActive.value =
+    performance.now() - pointerLastMoveAt < POINTER_ACTIVE_WINDOW ? 1 : 0;
+
+  renderer.setRenderTarget(fluidTargets[fluidWriteIndex]);
+  renderer.clear();
+  renderer.render(fluidScene, feedbackCamera);
+  fluidReadIndex = fluidWriteIndex;
+
+  renderer.setRenderTarget(sceneTarget);
+  renderer.clear();
+  renderer.render(scene, camera);
+
+  const writeIndex = 1 - readIndex;
+  feedbackMaterial.uniforms.tCurrent.value = sceneTarget.texture;
+  feedbackMaterial.uniforms.tPrevious.value = feedbackTargets[readIndex].texture;
+  feedbackMaterial.uniforms.tFluid.value = fluidTargets[fluidReadIndex].texture;
+
+  renderer.setRenderTarget(feedbackTargets[writeIndex]);
+  renderer.clear();
+  renderer.render(feedbackScene, feedbackCamera);
+
+  renderer.setRenderTarget(null);
+  renderer.clear();
+  renderer.render(feedbackScene, feedbackCamera);
+
+  readIndex = writeIndex;
+}
+
+loadFont().then((font) => {
+  buildTextGroup(font);
+  const box = new THREE.Box3().setFromObject(textGroup);
+  baseWidth = box.max.x - box.min.x;
+  fitTextToViewport();
+  resizeRenderTargets();
+  resizeFluidTargets();
+  animate();
+});
+</script>
+</body>
+</html>
