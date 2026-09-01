@@ -15,9 +15,9 @@ They believe that communication must be free - and for free - and, therefore, un
 
 *We stand with the A/I crew* and their fight for freedom of expression, freedom of information, equality and inclusion.
 
-## Share this page and show solidarity to the A/I collective!
+## Show solidarity to the A/I collective!
 
-To share this page on your website, download this repository, chose a demo and place it in a subfolder of your website `mywebsite.com/i-stand-with-autistici`, or put it as a subdomain `support-ai.mywebsite.com`.
+To share one of these demos on your website, download this repository, chose a demo and place it in a subfolder of your website `mywebsite.com/i-stand-with-autistici`, or put it as a subdomain `support-ai.mywebsite.com`.
 
 
 
