@@ -7,6 +7,8 @@ This repository contains some HTML to show solidarity to the A/I crew.
 
 [Read the full story on the A/I website](https://www.inventati.org/)
 
+[Keep it free](https://keepitfree.ai/)
+
 
 On August 26, 2026, the U.S. Department of the Treasury [designated](href="https://home.treasury.gov/news/press-releases/sb0616/") the italian collective [Autistici/Inventati](git@github.com:iocose/solidarity-with-autistici-inventati.git) as a Specially Designated Global Terrorist (SDGT). This means that A/I is under an existential threat, as it will become more and more difficult for them to keep their servers running.
 
