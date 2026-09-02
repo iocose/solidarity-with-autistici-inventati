@@ -74,7 +74,11 @@ import { TextGeometry } from './js/vendor/three/addons/geometries/TextGeometry.j
 
 const FONT_URL = './assets/AmericanTypewriter_Bold.json';
 const LINES = ['socializzare saperi', 'senza', 'creare poteri'];
-const TEXT_WIDTH_RATIO = 0.6;
+
+const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+// Mobile-only downscale for the 3D-text and feedback render targets (the display canvas stays full-res). Try 0.4-0.65.
+const RENDER_SCALE = 0.5;
+const TEXT_WIDTH_RATIO = IS_MOBILE ? 0.9 : 0.6;
 const LINE_SPACING = 1.15;
 const CAMERA_Z = 8;
 const PARALLAX_X = 1.4;
@@ -105,7 +109,7 @@ scene.background = new THREE.Color(0x0a0a0a);
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, CAMERA_Z);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_MOBILE });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.autoClear = false;
@@ -419,8 +423,9 @@ feedbackScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), feedbackMaterial
 
 function resizeRenderTargets() {
   const pixelRatio = renderer.getPixelRatio();
-  const width = Math.max(1, Math.floor(window.innerWidth * pixelRatio));
-  const height = Math.max(1, Math.floor(window.innerHeight * pixelRatio));
+  const renderScale = IS_MOBILE ? RENDER_SCALE : 1;
+  const width = Math.max(1, Math.floor(window.innerWidth * pixelRatio * renderScale));
+  const height = Math.max(1, Math.floor(window.innerHeight * pixelRatio * renderScale));
   sceneTarget.setSize(width, height);
   feedbackTargets[0].setSize(width, height);
   feedbackTargets[1].setSize(width, height);

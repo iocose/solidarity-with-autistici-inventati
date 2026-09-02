@@ -15,6 +15,12 @@ They believe that communication must be free - and for free - and, therefore, un
 
 *We stand with the A/I crew* and their fight for freedom of expression, freedom of information, equality and inclusion.
 
+
+
+## How to contribute
+
+Make a new folder with an index.html page inside, put there all the images, javascript files and css that you need. Use relative links. Give a significant name to that folder, open a pull request
+
 ## Show solidarity to the A/I collective!
 
 To share one of these demos on your website, download this repository, chose a demo and place it in a subfolder of your website `mywebsite.com/i-stand-with-autistici`, or put it as a subdomain `support-ai.mywebsite.com`.

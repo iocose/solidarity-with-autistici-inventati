@@ -74,6 +74,10 @@ import { TextGeometry } from './js/vendor/three/addons/geometries/TextGeometry.j
 
 const FONT_URL = './assets/AmericanTypewriter_Bold.json';
 
+const IS_MOBILE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+// Mobile-only downscale for the 3D-text and diffusion render targets (the display canvas stays full-res). Try 0.4-0.65.
+const RENDER_SCALE = 0.5;
+
 const PAR = [
   ['We can build','the internet'],
   ['that doesn\'t yet exist'], ['together'],
@@ -81,7 +85,7 @@ const PAR = [
   ['connection','by connection.']
 ]
 
-const TEXT_WIDTH_RATIO = 0.6;
+const TEXT_WIDTH_RATIO = IS_MOBILE ? 0.9 : 0.6;
 const LINE_SPACING = 1.15;
 const CAMERA_Z = 8;
 const PARALLAX_X = 1.4;
@@ -111,7 +115,7 @@ scene.background = new THREE.Color(0x0a0a0a);
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, CAMERA_Z);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_MOBILE });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.autoClear = false;
@@ -213,9 +217,20 @@ function createBufferTarget() {
   });
 }
 
+// Buffer B (imageTargets) is always clamped to [0, 1], so on mobile it can use
+// the default 8-bit format, which is cheaper to sample/write than HalfFloat.
+function createImageTarget() {
+  return new THREE.WebGLRenderTarget(1, 1, {
+    type: IS_MOBILE ? THREE.UnsignedByteType : THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+  });
+}
+
 const sceneTarget = createRenderTarget();
 
-const imageTargets = [createBufferTarget(), createBufferTarget()];
+const imageTargets = [createImageTarget(), createImageTarget()];
 let imageReadIndex = 0;
 
 const fieldTargets = [createBufferTarget(), createBufferTarget()];
@@ -422,14 +437,15 @@ displayScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), displayMaterial))
 
 function resizeRenderTargets() {
   const pixelRatio = renderer.getPixelRatio();
-  const width = Math.max(1, Math.floor(window.innerWidth * pixelRatio));
-  const height = Math.max(1, Math.floor(window.innerHeight * pixelRatio));
+  const renderScale = IS_MOBILE ? RENDER_SCALE : 1;
+  const width = Math.max(1, Math.floor(window.innerWidth * pixelRatio * renderScale));
+  const height = Math.max(1, Math.floor(window.innerHeight * pixelRatio * renderScale));
   sceneTarget.setSize(width, height);
   imageTargets[0].setSize(width, height);
   imageTargets[1].setSize(width, height);
   imageMaterial.uniforms.uTexel.value.set(1 / width, 1 / height);
-  imageMaterial.uniforms.uBrushRadius.value = PAINT_RADIUS_PX * pixelRatio;
-  imageMaterial.uniforms.uRingThickness.value = PAINT_RING_THICKNESS_PX * pixelRatio;
+  imageMaterial.uniforms.uBrushRadius.value = PAINT_RADIUS_PX * pixelRatio * renderScale;
+  imageMaterial.uniforms.uRingThickness.value = PAINT_RING_THICKNESS_PX * pixelRatio * renderScale;
   imageTargets.forEach((target) => {
     renderer.setRenderTarget(target);
     renderer.clear();
